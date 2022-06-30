@@ -32,6 +32,17 @@ class App extends Component {
     //load account
     const accounts = await web3.eth.getAccounts()
     this.setState({ account: accounts[0]})
+
+    // create a javascript version of the smart contract
+    //get network 
+    const networkId = await web3.eth.net.getId()
+    const networkData = Decentragram.networks[networkId]
+    if(networkData){
+      const decentragram = web3.eth.Contract(Decentragram.abi, networkData.address)
+    }else{
+      window.alert('Decentragram contract not deployed to detected network')
+    }
+
   }
 
   constructor(props) {
