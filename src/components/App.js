@@ -5,7 +5,10 @@ import './App.css';
 import Decentragram from '../abis/Decentragram.json'
 import Navbar from './Navbar'
 import Main from './Main'
+import { importDefaultSpecifier } from '@babel/types';
 
+const ipfsClient = require('ipfs-http-client');
+const ipfs = ipfsClient({ host: 'ipfs.infura.io', port: 5001, protocol: 'https'}) //leaving out the arguments will default to these values
 
 class App extends Component {
 
@@ -38,17 +41,64 @@ class App extends Component {
     const networkId = await web3.eth.net.getId()
     const networkData = Decentragram.networks[networkId]
     if(networkData){
-      const decentragram = web3.eth.Contract(Decentragram.abi, networkData.address)
+      const decentragram = web3.eth.Contract(Decentragram.abi, networkData.address);
+      this.setState({decentragram})
+      const imagesCount = await decentragram.methods.imageCount().call()
+      this.setState({ imagesCount })
+
+      //load images
+      for(var i=1; i <= imagesCount; i++){
+        const image = await decentragram.methods.images(i).call()
+        this.setState({
+          images: [...this.state.images, image]
+        })
+      }
+
+      this.setState({ loading: false})
+      
     }else{
       window.alert('Decentragram contract not deployed to detected network')
     }
 
   }
 
+  captureFile = event =>{
+    event.preventDefault()
+    const file = event.target.files[0]
+    const reader = new window.FileReader()
+    reader.readAsArrayBuffer(file)
+
+    reader.onloadend = ()=>{
+      this.setState({ buffer: Buffer(reader.result)})
+      console.log('buffer', this.state.buffer)
+    }
+  }
+
+  uploadImage = description =>{
+    console.log("Submitting file to ipfs....")
+
+    //adding file to the IPFS
+    ipfs.add(this.state.buffer, (error, result) =>{
+      console.log("ipfs result", result)
+      if(error){
+        console.error(error)
+        return
+      }
+
+      this.setState({loading: true})
+      this.state.decentragram.methods.uploadImage(result[0].hash, description).send({ from: this.state.account }).on('transactionHash', (hash)=>{
+        this.setState({ loading: false})
+      })
+    })
+  }
+
   constructor(props) {
     super(props)
     this.state = {
       account: '',
+      decentragram: null,
+      images: [],
+      loading: true
     }
   }
 
@@ -59,7 +109,9 @@ class App extends Component {
         { this.state.loading
           ? <div id="loader" className="text-center mt-5"><p>Loading...</p></div>
           : <Main
-            // Code...
+              images={this.state.images}
+              captureFile={this.captureFile}
+              uploadImage={this.uploadImage}
             />
           }
         }
